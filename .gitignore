@@ -1,0 +1,25 @@
+# Next.js 构建输出文件
+.next/            # 生产环境构建输出目录
+out/              # 静态导出输出目录
+build/            # 备用构建文件夹
+
+# Node.js 依赖包
+node_modules/     # npm 安装的外部包（可重新下载）
+
+# 包含密钥的环境文件
+.env
+.env*.local
+!.env.example     # 例外：保留示例环境文件
+
+# 测试相关
+coverage/
+
+# 系统和编辑器专属文件
+.DS_Store         # macOS 文件夹元数据文件
+.vscode/          # VS Code 配置（可选——根据团队习惯决定）
+.vercel           # Vercel CLI 本地缓存
+
+# 调试日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
