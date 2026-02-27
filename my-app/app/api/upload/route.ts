@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../lib/supabase';
 
-// 净化文件名，只保留字母、数字、点、下划线、连字符，防止特殊字符导致上传失败
 function sanitizeFileName(fileName: string): string {
-  // 提取扩展名
   const lastDotIndex = fileName.lastIndexOf('.');
   const baseName = lastDotIndex === -1 ? fileName : fileName.substring(0, lastDotIndex);
   const extension = lastDotIndex === -1 ? '' : fileName.substring(lastDotIndex);
-
-  // 将 baseName 中非安全字符替换为下划线
   const safeBase = baseName.replace(/[^a-zA-Z0-9_-]/g, '_');
-  // 限制长度（可选），避免过长
   const truncatedBase = safeBase.slice(0, 100);
   return truncatedBase + extension;
 }
@@ -23,16 +18,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // 生成安全的文件名：时间戳 + 净化后的原始文件名
     const originalName = file.name;
     const safeOriginal = sanitizeFileName(originalName);
     const fileName = `${Date.now()}_${safeOriginal}`;
 
-    console.log('Uploading with fileName:', fileName); // 调试日志
-
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const { data, error } = await supabase.storage
+    // 上传到 Storage
+    const { data: storageData, error: storageError } = await supabase.storage
       .from('documents')
       .upload(fileName, buffer, {
         contentType: file.type,
@@ -40,21 +33,38 @@ export async function POST(req: NextRequest) {
         upsert: false,
       });
 
-    if (error) {
-      console.error('Supabase upload error:', error);
-      throw error;
-    }
+    if (storageError) throw storageError;
 
     const { data: urlData } = supabase.storage
       .from('documents')
       .getPublicUrl(fileName);
 
+    // 插入数据库
+    const { data: dbData, error: dbError } = await supabase
+      .from('documents')
+      .insert([
+        {
+          file_name: originalName,
+          file_size: file.size,
+          storage_path: fileName,
+          public_url: urlData.publicUrl,
+        },
+      ])
+      .select()
+      .single();
+
+    if (dbError) {
+      // 插入失败时删除已上传的存储文件
+      await supabase.storage.from('documents').remove([fileName]);
+      throw dbError;
+    }
+
     return NextResponse.json({
-      id: data.path,
-      name: originalName, // 返回原始文件名（显示用）
-      size: file.size,
-      url: urlData.publicUrl,
-      uploadedAt: new Date().toISOString(),
+      id: dbData.id,               // 数据库自增ID
+      name: dbData.file_name,
+      size: dbData.file_size,
+      url: dbData.public_url,
+      uploadedAt: dbData.uploaded_at,
     });
   } catch (error: any) {
     console.error('Upload error:', error);

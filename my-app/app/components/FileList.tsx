@@ -11,7 +11,7 @@ interface FileItem {
 
 interface FileListProps {
   onSelectFile: (file: FileItem) => void;
-  onGenerateSummary: (file: FileItem) => void; // 新增属性
+  onGenerateSummary: (file: FileItem) => void;
 }
 
 export default function FileList({ onSelectFile, onGenerateSummary }: FileListProps) {
@@ -30,9 +30,10 @@ export default function FileList({ onSelectFile, onGenerateSummary }: FileListPr
     fetchFiles();
   }, []);
 
-  const handleDelete = async (fileName: string) => {
+  // 删除函数现在使用文件 id（数据库主键）
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure?')) return;
-    const res = await fetch(`/api/files/${encodeURIComponent(fileName)}`, {
+    const res = await fetch(`/api/files/${id}`, {
       method: 'DELETE',
     });
     if (res.ok) {
@@ -68,9 +69,9 @@ export default function FileList({ onSelectFile, onGenerateSummary }: FileListPr
               </td>
               <td>{(file.size / 1024).toFixed(2)} KB</td>
               <td>
-                {/* 点击 Generate Summary 调用 onGenerateSummary */}
                 <button onClick={() => onGenerateSummary(file)}>Generate Summary</button>
-                <button onClick={() => handleDelete(file.name)}>Delete</button>
+                {/* 删除按钮使用 file.id 而不是 file.name */}
+                <button onClick={() => handleDelete(file.id)}>Delete</button>
               </td>
             </tr>
           ))}

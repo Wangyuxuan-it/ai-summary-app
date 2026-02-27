@@ -1,41 +1,46 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '../../../lib/supabase'
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '../../../lib/supabase';
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }  // 注意类型改为 Promise
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 使用 await 获取 params
     const { id } = await params;
-    const fileName = id; // 现在 fileName 有正确的值了
+    const fileId = id;
 
-    console.log('Attempting to delete file from storage:', fileName);
-
-    // 执行删除操作
-    const { data, error } = await supabase.storage
+    // 查询数据库获取存储路径
+    const { data: file, error: fetchError } = await supabase
       .from('documents')
-      .remove([fileName]);
+      .select('storage_path')
+      .eq('id', fileId)
+      .single();
 
-    console.log('Supabase remove result:', { data, error });
-
-    if (error) {
-      console.error('Supabase storage error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (fetchError || !file) {
+      return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
 
-    // 检查是否真的有文件被删除
-    if (!data || data.length === 0) {
-      console.warn('No files were deleted. The file may not exist in storage.');
-      return NextResponse.json({ error: 'File not found in storage' }, { status: 404 });
-    }
+    // 删除存储文件
+    const { error: storageError } = await supabase.storage
+      .from('documents')
+      .remove([file.storage_path]);
 
-    // 如果后续有数据库记录，也在这里删除（暂时注释掉）
-    // await supabase.from('documents').delete().eq('storage_path', fileName)
+    if (storageError) throw storageError;
 
-    return NextResponse.json({ success: true, deleted: data });
-  } catch (error) {
+    // 删除数据库记录
+    const { error: dbError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', fileId);
+
+    if (dbError) throw dbError;
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
     console.error('Delete error:', error);
-    return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || 'Delete failed' },
+      { status: 500 }
+    );
   }
 }
